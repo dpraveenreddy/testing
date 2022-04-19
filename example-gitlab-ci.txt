@@ -1,0 +1,70 @@
+# You can override the included template(s) by including variable overrides
+# SAST customization: https://docs.gitlab.com/ee/user/application_security/sast/#customizing-the-sast-settings
+# Secret Detection customization: https://docs.gitlab.com/ee/user/application_security/secret_detection/#customizing-settings
+# Dependency Scanning customization: https://docs.gitlab.com/ee/user/application_security/dependency_scanning/#customizing-the-dependency-scanning-settings
+# Note that environment variables can be set in several places
+# See https://docs.gitlab.com/ee/ci/variables/#cicd-variable-precedence
+include:
+#- template: Code-Quality.gitlab-ci.yml
+- template: Security/SAST.gitlab-ci.yml
+- template: Security/DAST.gitlab-ci.yml
+- template: Auto-DevOps.gitlab-ci.yml
+image: maven:3.6-jdk-8-alpine
+stages:
+- build
+- test
+- deploy
+- review
+- dast
+- staging
+- canary
+- production
+- incremental rollout 10%
+- incremental rollout 25%
+- incremental rollout 50%
+- incremental rollout 100%
+- performance
+- cleanup
+build:
+  stage: build
+  script:
+  - mvn package -Dmaven.repo.local=./.m2/repository
+  artifacts:
+    paths:
+    - ".m2/"
+    - target/
+spotbugs-sast:
+  dependencies:
+  - build
+  variables:
+    MAVEN_REPO_PATH: "./.m2/repository"
+    COMPILE: 'false'
+  artifacts:
+    reports:
+      sast: gl-sast-report.json
+code_quality:
+  variables:
+    REPORT_FORMAT: html
+  artifacts:
+    paths:
+    - gl-code-quality-report.html
+deploy_review:
+  stage: test
+  script:
+  - echo "test a review app"
+  environment:
+    name: review/$CI_COMMIT_REF_SLUG
+    url: https://$CI_ENVIRONMENT_SLUG.gitlab.com
+  rules:
+  - if: "$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH"
+    when: never
+  - if: "$CI_COMMIT_BRANCH"
+dast:
+  image: registry.gitlab.com/gitlab-org/security-products/zaproxy
+  stage: test
+  variables:
+    DAST_WEBSITE: https://docs.gitlab.com
+    DAST_TARGET_AVAILABILITY_TIMEOUT: 120
+  allow_failure: true
+sast:
+  stage: test
